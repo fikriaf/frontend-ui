@@ -283,25 +283,46 @@ I can perform real-time blockchain analysis and provide detailed security report
       try {
         let fullResponse = ""
         let contentBuffer: string[] = []
+        let lastContentType = ""
         
         const systemPrompt = systemPrompts?.available_prompts?.default || "You are a helpful AI assistant specializing in blockchain security analysis."
         
         for await (const chunk of streamChat(message, systemPrompt)) {
           let content = ""
+          let currentContentType = "text"
           
           if (typeof chunk === 'string') {
             content = chunk
           } else if (chunk.content) {
             content = chunk.content
+            currentContentType = "content"
           } else if (chunk.delta?.content) {
             content = chunk.delta.content
+            currentContentType = "delta"
           } else if (chunk.choices?.[0]?.delta?.content) {
             content = chunk.choices[0].delta.content
+            currentContentType = "choices"
           }
           
           if (content) {
+            // Add newline if switching between different content types or if content looks like it should be on a new line
+            if (contentBuffer.length > 0 && 
+                (lastContentType !== currentContentType || 
+                 content.startsWith('\n') || 
+                 content.match(/^[\-\*\+]\s/) || // List items
+                 content.match(/^\d+\.\s/) || // Numbered lists
+                 content.match(/^#{1,6}\s/) || // Headers
+                 content.includes('\n\n'))) { // Paragraph breaks
+              
+              // Don't add extra newline if content already starts with one
+              if (!content.startsWith('\n') && !contentBuffer[contentBuffer.length - 1].endsWith('\n')) {
+                contentBuffer.push('\n')
+              }
+            }
+            
             // Add content to buffer
             contentBuffer.push(content)
+            lastContentType = currentContentType
             
             // Reconstruct the full response with proper formatting
             const reconstructedContent = reconstructStreamingContent(contentBuffer)
@@ -769,10 +790,40 @@ I can perform real-time blockchain analysis and provide detailed security report
   const reconstructStreamingContent = (contentBuffer: string[]): string => {
     if (contentBuffer.length === 0) return ""
     
-    // Join all content chunks
-    let fullContent = contentBuffer.join('')
+    // Join all content chunks with intelligent spacing
+    let fullContent = ""
     
-    // Clean up and format the content
+    for (let i = 0; i < contentBuffer.length; i++) {
+      const currentChunk = contentBuffer[i]
+      const prevChunk = i > 0 ? contentBuffer[i - 1] : ""
+      const nextChunk = i < contentBuffer.length - 1 ? contentBuffer[i + 1] : ""
+      
+      // Add the current chunk
+      fullContent += currentChunk
+      
+      // Add spacing logic for next chunk if it exists
+      if (nextChunk) {
+        const currentEndsWithNewline = currentChunk.endsWith('\n')
+        const nextStartsWithNewline = nextChunk.startsWith('\n')
+        const nextIsListItem = nextChunk.match(/^[\-\*\+]\s/) || nextChunk.match(/^\d+\.\s/)
+        const nextIsHeader = nextChunk.match(/^#{1,6}\s/)
+        const currentIsHeader = currentChunk.match(/#{1,6}\s[^\n]*$/)
+        
+        // Don't add extra spacing if chunks already have proper newlines
+        if (!currentEndsWithNewline && !nextStartsWithNewline) {
+          // Add spacing for different content types
+          if (nextIsHeader || nextIsListItem || currentIsHeader) {
+            fullContent += '\n\n'
+          } else if (currentChunk.length > 0 && nextChunk.length > 0 && 
+                    !currentChunk.endsWith(' ') && !nextChunk.startsWith(' ')) {
+            // Add space between words if needed
+            fullContent += ' '
+          }
+        }
+      }
+    }
+    
+    // Clean up and format the final content
     fullContent = fullContent
       // Ensure proper line breaks before headers
       .replace(/([^\n])(#{1,6}\s)/g, '$1\n\n$2')
@@ -1118,7 +1169,7 @@ I can perform real-time blockchain analysis and provide detailed security report
           position: absolute;
           left: 0;
           color: #22d3ee;
-          font-weight: bold;
+          font-weight: semibold;
           font-size: 14px;
           line-height: 1.4;
         }
@@ -1139,7 +1190,7 @@ I can perform real-time blockchain analysis and provide detailed security report
         
         .modern-analysis-container ol li::marker {
           color: #22d3ee;
-          font-weight: bold;
+          font-weight: semibold;
         }
 
         /* Chat message specific list styling - Match ChatBox approach */
@@ -1167,7 +1218,7 @@ I can perform real-time blockchain analysis and provide detailed security report
           position: absolute !important;
           left: 0 !important;
           color: #22d3ee !important;
-          font-weight: bold !important;
+          font-weight: 400 !important;
           font-size: 14px !important;
           line-height: 1.4 !important;
         }
@@ -1193,7 +1244,7 @@ I can perform real-time blockchain analysis and provide detailed security report
         .max-w-none ol li::marker,
         .markdown-content ol li::marker {
           color: #22d3ee !important;
-          font-weight: bold !important;
+          font-weight: semibold !important;
         }
 
         /* Force proper list display */
@@ -1577,7 +1628,7 @@ I can perform real-time blockchain analysis and provide detailed security report
           position: absolute;
           left: 0;
           color: #22d3ee;
-          font-weight: 600;
+          font-weight: 300;
         }
 
         /* No Threats Section */
@@ -1728,7 +1779,7 @@ I can perform real-time blockchain analysis and provide detailed security report
 
         .footer-info strong {
           color: #22d3ee;
-          font-weight: 600;
+          font-weight: 400;
         }
 
         .footer-info code {
